@@ -1,0 +1,4 @@
+This is the upload test. If you see this file in your bucket then it means that arbitrary user can upload any file to your bucket. Please fix the permissions to this bucket!
+
+Cheers!
+@Rzepsky. 
