@@ -23,7 +23,6 @@ Surprisingly I haven't found a one tool which has all these features:
 
 ```
 BucketScanner.py -l BUCKET_LIST [-w WRITE_TEST_FILE] [-r REGEX]  [-s MIN_SIZE] [-m MAX_SIZE] [-t THREADS] [-o OUTPUT_FILE] [-h HELP]
-
 ```
 
 ### Command line options
