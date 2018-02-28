@@ -33,8 +33,6 @@ BucketScanner.py -l BUCKET_LIST [-w WRITE_TEST_FILE] [-r REGEX]  [-s MIN_SIZE] [
 * `-s <minimum size>` - look only for files bigger than 's' bytes
 * `-m <maximum size>` - look only for files smaller than 'm' bytes 
 * `-t <threads>` - number of threads to run (default: `10`).
-* `-u <url/domain>` - full URL (including scheme), or base domain name.
-* `-v` - verbose output (show all results).
 * `-o <filename>` - specify an output file for collectable URLs.
 * `-h` - prints a help message.
 

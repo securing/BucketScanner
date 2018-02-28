@@ -4,22 +4,32 @@
 BucketScanner
 By @Rzepsky
 --------------
-======================== Notes ========================
+======================= Notes =======================
 This tool is made for legal purpose only!!! It allows you to:
 - find collectable files for an anonymous/authenticated user in your buckets
 - verify if an anonymous/authenticated user is allowed to upload arbitrary files to your buckets
 
-Example usage: ./BucketScanner.py -l bucket_list.txt -w upload_file.txt -r '^.*\.(db|sql)' -t 1000
 
-======================= Options =======================
+====================== Options ======================
 -l: specify a list with bucket names to check.
 -w: specify a file to upload to a bucket.
--o: specify an output file.
 -r: specify a regular expression to filter the output.
 -s: look only for files bigger than 's' bytes 
 -m: look only for files smaller than 'm' bytes 
 -t: specify number of threads to use.
+-o: specify an output file.
 -h: prints a help message.
+
+====================== Example ======================
+
+$ python BucketScanner.py -l bucket_list.txt -w upload_file.txt -r '^.*\.(db|sql)' -t 50 -m 5242880 -o output.txt
+
+
+The above command will:
+- test all buckets from bucket_list.txt file
+- test if you can upload upload_file.txt to any of the bucket included in bucket_list.txt
+- provide URLs in output.txt only to files bigger than 5 MB and with .db or .sql extension
+- work on 50 threads
 '''
 
 from argparse import ArgumentParser
@@ -211,7 +221,7 @@ if __name__ == "__main__":
     parser.add_argument("-r", dest="regex", required=False, default='', help="regular expression filter")
     parser.add_argument("-s", dest="min", type=int, required=False, default=1, help="minimun size.")
     parser.add_argument("-m", dest="max", type=int, required=False, default=0, help="maximum size.")
-    parser.add_argument("-t", dest="threads", type=int, required=False, default=1, help="thread count.")
+    parser.add_argument("-t", dest="threads", type=int, required=False, default=10, help="thread count.")
     parser.add_argument("-o", dest="output", type=str, required=False, default="output.txt", help="output file.")
 
     if len(sys.argv) == 1:
