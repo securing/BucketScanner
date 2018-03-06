@@ -180,8 +180,6 @@ def write_test(bucket_name, filename):
             print "Error: couldn't upload a {0} file to {1}. Details: {2}\n".format(filename,
                                                                                     bucket_name,
                                                                                     e)
-        finally:
-            print "done"
 
 
 def append_output(results):
