@@ -18,6 +18,8 @@ This tool is made for legal purpose only!!! It allows you to:
 -m: look only for files smaller than 'm' bytes 
 -t: specify number of threads to use.
 -o: specify an output file.
+-p: specify a profile.
+-pm: passive mode which only checks readibility of the bucket.
 -h: prints a help message.
 
 ====================== Example ======================
@@ -34,6 +36,7 @@ The above command will:
 
 from argparse import ArgumentParser
 from threading import Thread, Lock
+from botocore.exceptions import ProfileNotFound
 import math
 import boto3
 import requests
@@ -59,6 +62,8 @@ class Settings(object):
         self._REGEX = ".*"
         self._ANONYMOUS_MODE = False
         self._DISPLAY_SIZE = True
+        self._PROFILE_NAME = 'default'
+        self._PASSIVE_MODE = False
 
     def set_write_test(self, write_file):
         self._WRITE_TEST_ENABLED = True
@@ -83,6 +88,22 @@ class Settings(object):
     def set_regex(self, regex):
         self._REGEX = regex
 
+    def set_profile(self, profile):
+        self._PROFILE_NAME = profile
+        if !self.test_profile():
+            self.set_anonymous_mode()
+
+    def test_profile(self):
+        try:
+            boto3.Session(profile_name=self._PROFILE_NAME)
+        except ProfileNotFound:
+            print('Profile {0} not found'.format(self._PROFILE_NAME))
+            return False
+        return True
+
+    def set_passive_mode(self):
+        self._PASSIVE_MODE = True
+
 
 def get_region(bucket_name):
     try:
@@ -99,9 +120,9 @@ def get_session(bucket_name, region):
             sess = boto3.session.Session(region_name=region)
         else:
             sess = boto3.session.Session(
-                region_name=region,
-                aws_access_key_id=AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=AWS_SECRET_ACCESS_KEY)
+                profile_name=settings._PROFILE_NAME,
+                region_name=region
+            )
         conn = sess.resource('s3')
         bucket = conn.Bucket(bucket_name)
         return bucket
@@ -143,21 +164,33 @@ def bucket_reader(bucket_name):
         bucket = get_bucket(bucket_name)
         results = ""
         try:
-            for s3_object in bucket.objects.all():
+            if settings._PASSIVE_MODE:
                 try:
-                    content_length = s3_object.get()["ContentLength"]
-                    if is_in_limits(settings._MIN_SIZE, settings._MAX_SIZE, content_length) and \
-                            re.match(settings._REGEX, s3_object.key):
+                    for s3_object in bucket.objects.all():
+                        try:
+                             s3_object.get()["ContentLength"]
+                            results += bucket_name + '\n'
+                        except Exception as e:
+                            print "Error: couldn't get '{0}' object in '{1}' bucket. Details: {2}\n".format(
+                                s3_object.key.encode('utf-8'),
+                                bucket_name, e)
+                            break;
+            else:
+                for s3_object in bucket.objects.all():
+                    try:
+                        content_length = s3_object.get()["ContentLength"]
+                        if is_in_limits(settings._MIN_SIZE, settings._MAX_SIZE, content_length) and \
+                                re.match(settings._REGEX, s3_object.key):
 
-                        item = "http://s3.{0}.amazonaws.com/{1}/{2}".format(
-                            region, bucket_name,
-                            s3_object.key.encode('utf-8'))
-                        results += item + '\n'
-                        print "Collectable: {0} {1}".format(item, size(content_length))
-                except Exception as e:
-                    print "Error: couldn't get '{0}' object in '{1}' bucket. Details: {2}\n".format(
-                        s3_object.key.encode('utf-8'),
-                        bucket_name, e)
+                            item = "http://s3.{0}.amazonaws.com/{1}/{2}".format(
+                                region, bucket_name,
+                                s3_object.key.encode('utf-8'))
+                            results += item + '\n'
+                            print "Collectable: {0} {1}".format(item, size(content_length))
+                    except Exception as e:
+                        print "Error: couldn't get '{0}' object in '{1}' bucket. Details: {2}\n".format(
+                            s3_object.key.encode('utf-8'),
+                            bucket_name, e)
 
             append_output(results)
         except Exception as e:
@@ -219,7 +252,9 @@ This tool is made for legal purpose only!!! It allows you to:
 -m: look only for files smaller than 'm' bytes
 -t: specify number of threads to use.
 -o: specify an output file.
+-p: specify a profile.
 -h: prints a help message.
+-pm: passive mode which only checks readibility of the bucket.
 
 ====================== Example ======================
 
@@ -237,6 +272,7 @@ The above command will:
 def closing_words():
     print "That's all folks! All collectable files can be found in {0}.".format(settings._OUTPUT_FILE)
 
+
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("-l", dest="bucket_list", required=True, help="a list with bucket names.")
@@ -244,12 +280,15 @@ if __name__ == "__main__":
                         default="", help="file to execute upload test.")
     parser.add_argument("-r", dest="regex", required=False,
                         default='', help="regular expression filter")
-    parser.add_argument("-s", dest="min", type=int, required=False, default=1, help="minimun size.")
+    parser.add_argument("-s", dest="min", type=int, required=False, default=1, help="minimum size.")
     parser.add_argument("-m", dest="max", type=int, required=False, default=0, help="maximum size.")
     parser.add_argument("-t", dest="threads", type=int, required=False,
                         default=10, help="thread count.")
     parser.add_argument("-o", dest="output", type=str, required=False,
                         default="output.txt", help="output file.")
+    parser.add_argument("-p", "--profile", type=str, required=False,
+                        default="default", help="profile name.")
+    parser.add_argument("-pm", dest="passive_mode", required=False, action="store_true")
 
     if len(sys.argv) == 1:
         print_help()
@@ -273,10 +312,11 @@ if __name__ == "__main__":
     if arguments.max > 1:
         settings.set_maxsize(arguments.max)
 
-    if not (AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY):
-        settings.set_anonymous_mode()
-
-    arguments = parser.parse_args()
+    if arguments.profile:
+        settings.set_profile(arguments.profile)
+    
+    if arguments.passive_mode:
+        settings.set_passive_mode()
 
     for i in range(0, arguments.threads):
         t = Thread(target=bucket_worker)
