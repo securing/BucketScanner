@@ -3,6 +3,7 @@
 --------------
 BucketScanner
 By @Rzepsky
+Updated by @_pkusik
 --------------
 ======================= Notes =======================
 This tool is made for legal purpose only!!! It allows you to:
@@ -37,15 +38,18 @@ The above command will:
 from argparse import ArgumentParser
 from threading import Thread, Lock
 from botocore.exceptions import ProfileNotFound
+from botocore import UNSIGNED
+from botocore.client import Config
+from termcolor import colored
 import math
 import boto3
 import requests
-import Queue
+import queue
 import re
 import sys
 
 
-queue = Queue.Queue()
+queue = queue.Queue()
 
 AWS_ACCESS_KEY_ID = ''
 AWS_SECRET_ACCESS_KEY = ''
@@ -80,24 +84,23 @@ class Settings(object):
 
     def set_anonymous_mode(self):
         self._ANONYMOUS_MODE = True
-        print('''All tests will be executed in anonymous mode:
-        If you want to send all requests using your AWS account please specify
-        AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY variables in {0} file
-        '''.format(sys.argv[0]))
+        print(colored('''All tests will be executed in anonymous mode:
+        If you want to send all requests using your AWS account please use -p [profile_name] argument
+        ''', 'magenta'))
 
     def set_regex(self, regex):
         self._REGEX = regex
 
     def set_profile(self, profile):
         self._PROFILE_NAME = profile
-        if !self.test_profile():
+        if not self.test_profile():
             self.set_anonymous_mode()
 
     def test_profile(self):
         try:
             boto3.Session(profile_name=self._PROFILE_NAME)
         except ProfileNotFound:
-            print('Profile {0} not found'.format(self._PROFILE_NAME))
+            print(colored(f"Profile {self._PROFILE_NAME} not found", 'red'))
             return False
         return True
 
@@ -111,31 +114,32 @@ def get_region(bucket_name):
         region = response.headers.get('x-amz-bucket-region')
         return region
     except Exception as e:
-        print "Error: couldn't connect to '{0}' bucket. Details: {1}".format(response, e)
+        print(colored(f"Error: couldn't connect to '{response}' bucket. Details: {e}", 'red'))
 
 
 def get_session(bucket_name, region):
     try:
         if settings._ANONYMOUS_MODE:
-            sess = boto3.session.Session(region_name=region)
+            conn = boto3.resource('s3', config=Config(signature_version=UNSIGNED))
+            # sess = boto3.session.Session()
         else:
             sess = boto3.session.Session(
                 profile_name=settings._PROFILE_NAME,
                 region_name=region
             )
-        conn = sess.resource('s3')
+            conn = sess.resource('s3')
         bucket = conn.Bucket(bucket_name)
         return bucket
 
     except Exception as e:
-        print "Error: couldn't create a session with '{0}' bucket. Details: {1}".format(bucket_name, e)
+        print(colored(f"Error: couldn't create a session with '{bucket_name}' bucket. Details: {e}", 'cyan'))
 
 
 def get_bucket(bucket_name):
     region = get_region(bucket_name)
     bucket = ""
     if region == 'None':
-        print "Bucket '{0}' does not exist.".format(bucket_name.encode('utf-8'))
+        print(colored(f"Bucket '{bucket_name.encode('utf-8')}' does not exist.", ''))
     else:
         bucket = get_session(bucket_name, region)
     return bucket
@@ -160,21 +164,19 @@ def bucket_reader(bucket_name):
     if region == 'None':
         pass
     else:
-        print "Testing bucket {0}...".format(bucket_name)
+        print(f"Testing bucket {bucket_name}...")
         bucket = get_bucket(bucket_name)
         results = ""
         try:
             if settings._PASSIVE_MODE:
-                try:
-                    for s3_object in bucket.objects.all():
-                        try:
-                             s3_object.get()["ContentLength"]
+                for s3_object in bucket.objects.all():
+                    try:
+                        if s3_object.key:
+                            print(colored(f"{bucket_name} is collectable!", 'green'))
                             results += bucket_name + '\n'
-                        except Exception as e:
-                            print "Error: couldn't get '{0}' object in '{1}' bucket. Details: {2}\n".format(
-                                s3_object.key.encode('utf-8'),
-                                bucket_name, e)
-                            break;
+                    except Exception as e:
+                        print(colored(f"Error: couldn't get '{s3_object.key.encode('utf-8')}' object in '{bucket_name}' bucket. Details: {e}\n", 'yellow'))
+                        break;
             else:
                 for s3_object in bucket.objects.all():
                     try:
@@ -186,15 +188,13 @@ def bucket_reader(bucket_name):
                                 region, bucket_name,
                                 s3_object.key.encode('utf-8'))
                             results += item + '\n'
-                            print "Collectable: {0} {1}".format(item, size(content_length))
+                            print(f"Collectable: {item} {size(content_length)}")
                     except Exception as e:
-                        print "Error: couldn't get '{0}' object in '{1}' bucket. Details: {2}\n".format(
-                            s3_object.key.encode('utf-8'),
-                            bucket_name, e)
+                        print(colored(f"Error: couldn't get '{s3_object.key.encode('utf-8')}' object in '{bucket_name}' bucket. Details: {e}\n", 'yellow'))
 
             append_output(results)
         except Exception as e:
-            print "Error: couldn't access the '{0}' bucket. Details: {1}\n".format(bucket_name, e)
+            print(colored(f"Error: couldn't access the '{bucket_name}' bucket. Details: {e}\n", 'yellow'))
 
 
 def write_test(bucket_name, filename):
@@ -204,15 +204,13 @@ def write_test(bucket_name, filename):
             data = open(filename, 'rb')
             bucket = get_bucket(bucket_name)
             bucket.put_object(Bucket=bucket_name, Key=filename, Body=data)
-            print "Success: bucket '{0}' allows for uploading arbitrary files!!!".format(bucket_name.encode('utf-8'))
+            print(colored(f"Success: bucket '{bucket_name.encode('utf-8')}' allows for uploading arbitrary files!!!", 'green'))
             results = "http://s3.{0}.amazonaws.com/{1}/{2}\n".format(region,
                                                                      bucket_name,
                                                                      filename)
             append_output(results)
         except Exception as e:
-            print "Error: couldn't upload a {0} file to {1}. Details: {2}\n".format(filename,
-                                                                                    bucket_name,
-                                                                                    e)
+            print(colored(f"Error: couldn't upload a {filename} file to {bucket_name}. Details: {e}\n", 'yellow'))
 
 
 def append_output(results):
@@ -228,7 +226,7 @@ def bucket_worker():
             if settings._WRITE_TEST_ENABLED:
                 write_test(bucket, settings._WRITE_TEST_FILE)
         except Exception as e:
-            print "Error: {0}\n".format(e)
+            print(colored(f"Error: {e}\n", 'red'))
         queue.task_done()
 
 
@@ -237,6 +235,7 @@ def print_help():
 --------------
 BucketScanner
 By @Rzepsky
+Updated by @_pkusik
 --------------
 ======================= Notes =======================
 This tool is made for legal purpose only!!! It allows you to:
@@ -270,7 +269,7 @@ The above command will:
 
 
 def closing_words():
-    print "That's all folks! All collectable files can be found in {0}.".format(settings._OUTPUT_FILE)
+    print(f"That's all folks! All collectable files can be found in {settings._OUTPUT_FILE}.")
 
 
 if __name__ == "__main__":
@@ -297,7 +296,7 @@ if __name__ == "__main__":
     settings = Settings()
     arguments = parser.parse_args()
 
-    if arguments.output is not "output.txt":
+    if arguments.output != "output.txt":
         settings.set_output_file(arguments.output)
 
     if arguments.write:
