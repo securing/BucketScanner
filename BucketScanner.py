@@ -211,12 +211,12 @@ def passive_reader(bucket, bucket_name):
                 s3_object.get()
                 downloadable += bucket_name + '\n'
                 print(colored(f"{bucket_name} is possible to download!!", 'green'))
-                break;
+                break
         except Exception as e:
             print(colored(f"Error: couldn't get '{s3_object.key}' object in '{bucket_name}' bucket. Details: {e}", 'yellow'))
             if settings._DETAILED_MODE:
                 append_output(bucket_name + "\n", settings._NONDOWNLOADABLE_FILE)
-            break;
+            break
     return listable, downloadable
 
 
