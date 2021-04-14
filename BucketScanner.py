@@ -244,6 +244,8 @@ def write_test(bucket_name, filename):
         try:
             data = open(filename, 'rb')
             bucket = get_bucket(bucket_name)
+            if bucket == "":
+                return
             bucket.put_object(Bucket=bucket_name, Key=filename, Body=data)
             print(colored(f"Success: bucket '{bucket_name.encode('utf-8')}' allows for uploading arbitrary files!!!", 'green'))
             results = "http://s3.{0}.amazonaws.com/{1}/{2}\n".format(region,
