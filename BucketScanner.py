@@ -200,14 +200,18 @@ def bucket_reader(bucket_name):
 def passive_reader(bucket, bucket_name):
     listable = ""
     downloadable = ""
+    first_check = True
     for s3_object in bucket.objects.all():
         try:
             if s3_object.key:
-                print(colored(f"{bucket_name} is listable!", 'green'))
-                listable += bucket_name + '\n'
+                if first_check:
+                    print(colored(f"{bucket_name} is listable!", 'green'))
+                    listable += bucket_name + '\n'
+                    first_check = False
                 s3_object.get()
                 downloadable += bucket_name + '\n'
                 print(colored(f"{bucket_name} is possible to download!!", 'green'))
+                break;
         except Exception as e:
             print(colored(f"Error: couldn't get '{s3_object.key}' object in '{bucket_name}' bucket. Details: {e}", 'yellow'))
             if settings._DETAILED_MODE:
