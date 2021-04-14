@@ -129,9 +129,10 @@ def get_region(bucket_name):
 def get_session(bucket_name, region):
     try:
         if settings._ANONYMOUS_MODE:
-            conn = boto3.resource('s3', config=Config(signature_version=UNSIGNED))
+            sess = boto3.Session(region_name=region)
+            conn = sess.resource('s3', config=Config(signature_version=UNSIGNED))
         else:
-            sess = boto3.session.Session(
+            sess = boto3.Session(
                 profile_name=settings._PROFILE_NAME,
                 region_name=region
             )
@@ -181,12 +182,12 @@ def bucket_reader(bucket_name):
         bucket = get_bucket(bucket_name)
         try:
             if settings._PASSIVE_MODE:
-                listable, downloadable = passive_reader(bucket, bucket_name)
+                results, downloadable = passive_reader(bucket, bucket_name)
             else:
                 results = active_reader(bucket, bucket_name)
 
             if settings._DETAILED_MODE:
-                append_output(listable + "\n", settings._LISTABLE_FILE)
+                append_output(results + "\n", settings._LISTABLE_FILE)
                 append_output(downloadable + "\n", settings._DOWNLOADABLE_FILE)
             else:
                 append_output(results, settings._OUTPUT_FILE)
