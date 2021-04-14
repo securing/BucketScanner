@@ -22,7 +22,7 @@ Surprisingly I haven't found a one tool which has all these features:
 ### Usage
 
 ```
-BucketScanner.py -l BUCKET_LIST [-w WRITE_TEST_FILE] [-r REGEX]  [-s MIN_SIZE] [-m MAX_SIZE] [-t THREADS] [-o OUTPUT_FILE] [-h HELP]
+BucketScanner.py -l BUCKET_LIST [-w WRITE_TEST_FILE] [-r REGEX]  [-s MIN_SIZE] [-m MAX_SIZE] [-t THREADS] [-o OUTPUT_FILE] [-p PROFILE] [-pm] [-d] [-h HELP]
 ```
 
 ### Command line options
@@ -34,9 +34,10 @@ BucketScanner.py -l BUCKET_LIST [-w WRITE_TEST_FILE] [-r REGEX]  [-s MIN_SIZE] [
 * `-m <maximum size>` - look only for files smaller than 'm' bytes 
 * `-t <threads>` - number of threads to run (default: `10`).
 * `-o <filename>` - specify an output file for collectable URLs.
+* `-p <profile>` - specify a AWS profile name.
+* `-pm` - passive mode which only checks readibility of the bucket (can be combined with write test).
+* `-d` - detailed mode (more output files with details if the bucket exists, if listable, objects are downloadable and if writable) (works only with passive mode and/or write test).
 * `-h` - prints a help message.
-
-> Please note that to use authenticated requests you have to specify `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` variables in BucketScanner.py file.
 
 ### Example
 
@@ -51,7 +52,7 @@ Using the above command, a BucketScanner will:
 * work on 50 threads
 
 ### Pre-requisites
-To run the BucketScanner you have to install python `boto3` and `requests` libraries. You can do this by running the following command:
+To run the BucketScanner you have to install python `boto3`, `requests` and `termcolor` libraries. You can do this by running the following command:
 
 ```
 pip install -r requirements.txt

@@ -19,8 +19,9 @@ This tool is made for legal purpose only!!! It allows you to:
 -m: look only for files smaller than 'm' bytes 
 -t: specify number of threads to use.
 -o: specify an output file.
--p: specify a profile.
--pm: passive mode which only checks readibility of the bucket.
+-p: specify a AWS profile name.
+-pm: passive mode which only checks readibility of the bucket (can be combined with write test).
+-d: detailed mode (more output files with details if the bucket exists, if listable, objects are downloadable and if writable) (works only with passive mode and/or write test).
 -h: prints a help message.
 
 ====================== Example ======================
@@ -51,9 +52,6 @@ import sys
 
 queue = queue.Queue()
 
-AWS_ACCESS_KEY_ID = ''
-AWS_SECRET_ACCESS_KEY = ''
-
 
 class Settings(object):
 
@@ -61,6 +59,13 @@ class Settings(object):
         self._WRITE_TEST_ENABLED = False
         self._WRITE_TEST_FILE = False
         self._OUTPUT_FILE = "output.txt"
+        self._NOTACCESIBLE_FILE = "notaccesible.txt"
+        self._NONEXISTING_FILE = "nonexisting.txt"
+        self._NONDOWNLOADABLE_FILE = "nondownloadable.txt"
+        self._NONWRITABLE_FILE = "nonwritable.txt"
+        self._WRITABLE_FILE = "writable.txt"
+        self._DOWNLOADABLE_FILE = "downloadable.txt"
+        self._LISTABLE_FILE = "listable.txt"
         self._MIN_SIZE = 1
         self._MAX_SIZE = 0
         self._REGEX = ".*"
@@ -68,6 +73,7 @@ class Settings(object):
         self._DISPLAY_SIZE = True
         self._PROFILE_NAME = 'default'
         self._PASSIVE_MODE = False
+        self._DETAILED_MODE = False
 
     def set_write_test(self, write_file):
         self._WRITE_TEST_ENABLED = True
@@ -107,6 +113,9 @@ class Settings(object):
     def set_passive_mode(self):
         self._PASSIVE_MODE = True
 
+    def set_detailed_mode(self):
+        self._DETAILED_MODE = True
+
 
 def get_region(bucket_name):
     try:
@@ -121,7 +130,6 @@ def get_session(bucket_name, region):
     try:
         if settings._ANONYMOUS_MODE:
             conn = boto3.resource('s3', config=Config(signature_version=UNSIGNED))
-            # sess = boto3.session.Session()
         else:
             sess = boto3.session.Session(
                 profile_name=settings._PROFILE_NAME,
@@ -132,14 +140,16 @@ def get_session(bucket_name, region):
         return bucket
 
     except Exception as e:
-        print(colored(f"Error: couldn't create a session with '{bucket_name}' bucket. Details: {e}", 'cyan'))
+        print(colored(f"Error: couldn't create a session with '{bucket_name}' bucket. Details: {e}", 'red'))
 
 
 def get_bucket(bucket_name):
     region = get_region(bucket_name)
     bucket = ""
-    if region == 'None':
-        print(colored(f"Bucket '{bucket_name.encode('utf-8')}' does not exist.", ''))
+    if region is None:
+        print(colored(f"Bucket '{bucket_name}' does not exist.", 'magenta'))
+        if settings._DETAILED_MODE:
+            append_output(bucket_name + "\n", settings._NONEXISTING_FILE)
     else:
         bucket = get_session(bucket_name, region)
     return bucket
@@ -161,40 +171,66 @@ def is_in_limits(minsize, maxsize, content_length):
 
 def bucket_reader(bucket_name):
     region = get_region(bucket_name)
-    if region == 'None':
+    if region is None:
+        print(colored(f"Bucket '{bucket_name}' does not exist", 'magenta'))
+        if settings._DETAILED_MODE:
+            append_output(bucket_name + "\n", settings._NONEXISTING_FILE)
         pass
     else:
-        print(f"Testing bucket {bucket_name}...")
+        print(f"Testing bucket '{bucket_name}'...")
         bucket = get_bucket(bucket_name)
-        results = ""
         try:
             if settings._PASSIVE_MODE:
-                for s3_object in bucket.objects.all():
-                    try:
-                        if s3_object.key:
-                            print(colored(f"{bucket_name} is collectable!", 'green'))
-                            results += bucket_name + '\n'
-                    except Exception as e:
-                        print(colored(f"Error: couldn't get '{s3_object.key.encode('utf-8')}' object in '{bucket_name}' bucket. Details: {e}\n", 'yellow'))
-                        break;
+                listable, downloadable = passive_reader(bucket, bucket_name)
             else:
-                for s3_object in bucket.objects.all():
-                    try:
-                        content_length = s3_object.get()["ContentLength"]
-                        if is_in_limits(settings._MIN_SIZE, settings._MAX_SIZE, content_length) and \
-                                re.match(settings._REGEX, s3_object.key):
+                results = active_reader(bucket, bucket_name)
 
-                            item = "http://s3.{0}.amazonaws.com/{1}/{2}".format(
-                                region, bucket_name,
-                                s3_object.key.encode('utf-8'))
-                            results += item + '\n'
-                            print(f"Collectable: {item} {size(content_length)}")
-                    except Exception as e:
-                        print(colored(f"Error: couldn't get '{s3_object.key.encode('utf-8')}' object in '{bucket_name}' bucket. Details: {e}\n", 'yellow'))
-
-            append_output(results)
+            if settings._DETAILED_MODE:
+                append_output(listable + "\n", settings._LISTABLE_FILE)
+                append_output(downloadable + "\n", settings._DOWNLOADABLE_FILE)
+            else:
+                append_output(results, settings._OUTPUT_FILE)
         except Exception as e:
-            print(colored(f"Error: couldn't access the '{bucket_name}' bucket. Details: {e}\n", 'yellow'))
+            print(colored(f"Error: couldn't access the '{bucket_name}' bucket. Details: {e}", 'yellow'))
+            if settings._DETAILED_MODE:
+                append_output(bucket_name + "\n", settings._NOTACCESIBLE_FILE)
+
+
+def passive_reader(bucket, bucket_name):
+    listable = ""
+    downloadable = ""
+    for s3_object in bucket.objects.all():
+        try:
+            if s3_object.key:
+                print(colored(f"{bucket_name} is listable!", 'green'))
+                listable += bucket_name + '\n'
+                s3_object.get()
+                downloadable += bucket_name + '\n'
+                print(colored(f"{bucket_name} is possible to download!!", 'green'))
+        except Exception as e:
+            print(colored(f"Error: couldn't get '{s3_object.key}' object in '{bucket_name}' bucket. Details: {e}", 'yellow'))
+            if settings._DETAILED_MODE:
+                append_output(bucket_name + "\n", settings._NONDOWNLOADABLE_FILE)
+            break;
+    return listable, downloadable
+
+
+def active_reader(bucket, bucket_name):
+    results = ""
+    for s3_object in bucket.objects.all():
+        try:
+            content_length = s3_object.get()["ContentLength"]
+            if is_in_limits(settings._MIN_SIZE, settings._MAX_SIZE, content_length) and \
+                    re.match(settings._REGEX, s3_object.key):
+
+                item = "http://s3.{0}.amazonaws.com/{1}/{2}".format(
+                    region, bucket_name,
+                    s3_object.key)
+                results += item + '\n'
+                print(f"Collectable: {item} {size(content_length)}")
+        except Exception as e:
+            print(colored(f"Error: couldn't get '{s3_object.key}' object in '{bucket_name}' bucket. Details: {e}", 'yellow'))
+    return results
 
 
 def write_test(bucket_name, filename):
@@ -208,13 +244,17 @@ def write_test(bucket_name, filename):
             results = "http://s3.{0}.amazonaws.com/{1}/{2}\n".format(region,
                                                                      bucket_name,
                                                                      filename)
-            append_output(results)
+            append_output(results, settings._OUTPUT_FILE)
+            if settings._DETAILED_MODE:
+                append_output(bucket_name + "\n", settings._WRITABLE_FILE)
         except Exception as e:
             print(colored(f"Error: couldn't upload a {filename} file to {bucket_name}. Details: {e}\n", 'yellow'))
+            if settings._DETAILED_MODE:
+                append_output(bucket_name + "\n", settings._NONWRITABLE_FILE)
 
 
-def append_output(results):
-    with open(settings._OUTPUT_FILE, "a") as output:
+def append_output(results, file):
+    with open(file, "a") as output:
         output.write(results)
 
 
@@ -251,9 +291,10 @@ This tool is made for legal purpose only!!! It allows you to:
 -m: look only for files smaller than 'm' bytes
 -t: specify number of threads to use.
 -o: specify an output file.
--p: specify a profile.
+-p: specify a AWS profile name.
 -h: prints a help message.
--pm: passive mode which only checks readibility of the bucket.
+-pm: passive mode which only checks readibility of the bucket (can be combined with write test).
+-d: detailed mode (more output files with details if the bucket exists, if listable, objects are downloadable and if writable) (works only with passive mode and/or write test).
 
 ====================== Example ======================
 
@@ -269,7 +310,19 @@ The above command will:
 
 
 def closing_words():
-    print(f"That's all folks! All collectable files can be found in {settings._OUTPUT_FILE}.")
+    if settings._DETAILED_MODE:
+        print(colored(f"""\nThat's all folks! Sum up of scan can be found in 
+            {settings._LISTABLE_FILE}, 
+            {settings._DOWNLOADABLE_FILE}, 
+            {settings._WRITABLE_FILE} (if tested), 
+            {settings._NONWRITABLE_FILE} (if tested), 
+            {settings._NONDOWNLOADABLE_FILE}, 
+            {settings._NONEXISTING_FILE}, 
+            {settings._NOTACCESIBLE_FILE}.""", attrs=['bold']))
+    elif settings._PASSIVE_MODE:
+        print(colored(f"\nThat's all folks! All listable bucket names can be found in {settings._OUTPUT_FILE}.", attrs=['bold']))
+    else:
+        print(colored(f"\nThat's all folks! All collectable files can be found in {settings._OUTPUT_FILE}.", attrs=['bold']))
 
 
 if __name__ == "__main__":
@@ -285,9 +338,12 @@ if __name__ == "__main__":
                         default=10, help="thread count.")
     parser.add_argument("-o", dest="output", type=str, required=False,
                         default="output.txt", help="output file.")
-    parser.add_argument("-p", "--profile", type=str, required=False,
-                        default="default", help="profile name.")
-    parser.add_argument("-pm", dest="passive_mode", required=False, action="store_true")
+    parser.add_argument("-p", dest="profile", type=str, required=False,
+                        default="default", help="AWS profile name.")
+    parser.add_argument("-pm", dest="passive_mode", required=False, 
+                        action="store_true", help="checks readibility of the bucket (can be combined with write test).")
+    parser.add_argument("-d", dest="detailed", required=False,
+                        action="store_true", help="create detailed output (only with passive and/or write mode).")
 
     if len(sys.argv) == 1:
         print_help()
@@ -316,6 +372,9 @@ if __name__ == "__main__":
     
     if arguments.passive_mode:
         settings.set_passive_mode()
+
+    if arguments.detailed:
+        settings.set_detailed_mode()
 
     for i in range(0, arguments.threads):
         t = Thread(target=bucket_worker)
